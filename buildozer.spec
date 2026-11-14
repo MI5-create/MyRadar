@@ -28,8 +28,9 @@ android.accept_sdk_license = True
 android.minapi = 24
 android.archs = arm64-v8a, armeabi-v7a
 # 强制使用国内 Gitee 镜像下载 p4a，防止 GitHub 网络断流
-p4a.url = https://gitee.com/mirrors/python-for-android.git
-p4a.branch = master
+# 强制使用本地 python-for-android 源码目录
+p4a.source_dir = /home/runner/work/MyRadar/MyRadar/.buildozer/android/platform/python-for-android
+p4a.local_recipes = /home/runner/work/MyRadar/MyRadar/.buildozer/android/platform/python-for-android
 
 # APP 图标（如果你在文件夹里放了 icon.png，把这行前面的 # 删掉）
 # icon.filename = %(source.dir)s/icon.png
