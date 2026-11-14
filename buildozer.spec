@@ -11,8 +11,8 @@ source.include_exts = py,png,jpg,kv,json,ttf,ttc
 
 version = 1.0.1
 
-# 核心：依赖库（保持最精简，不锁死版本，让官方自动匹配）
-requirements = python3,kivy==2.3.0,requests,urllib3,plyer,android
+# 核心：强制锁定兼容的 Cython 版本和依赖
+requirements = python3,kivy==2.3.0,Cython==0.29.36,requests,urllib3,plyer,android
 
 # 竖屏
 orientation = portrait
