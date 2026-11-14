@@ -20,7 +20,7 @@ android.permissions = INTERNET, ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, WR
 android.api = 33
 android.accept_sdk_license = True
 android.minapi = 24
-android.archs = arm64-v8a, armeabi-v7a
+android.archs = arm64-v8a
 # 锁定官方最适配的 NDK 版本
 android.ndk = 25b
 
