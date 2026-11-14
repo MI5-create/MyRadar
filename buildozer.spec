@@ -23,6 +23,7 @@ android.permissions = INTERNET, ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, WR
 
 # 目标安卓版本
 android.api = 33
+android.accept_sdk_license = True
 android.minapi = 24
 android.archs = arm64-v8a, armeabi-v7a
 
