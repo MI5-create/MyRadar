@@ -3,50 +3,86 @@ name: Build APK
 on:
   push:
     branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   build-android:
     runs-on: ubuntu-22.04
-    
+
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
 
-    # 补全所有底层编译可能缺失的 C 语言依赖库（automake, libltdl-dev）
-    - name: Install System Dependencies
-    run: |
-      sudo apt-get update
-      sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool
-      # 强制在服务器端接受 Android SDK 许可证
-      echo "y" | sudo tee /dev/null | sudo android update sdk --no-ui --filter tools,platform-tools,android-33 --force
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip \
+            openjdk-17-jdk \
+            python3-pip \
+            autoconf automake libtool \
+            pkg-config \
+            libffi-dev \
+            libssl-dev \
+            zlib1g-dev \
+            libncurses5 \
+            libncursesw5 \
+            libtinfo5 \
+            ccache \
+            build-essential
 
-    # 直接安装，不使用缓存，保证环境绝对干净
-    - name: Install Buildozer
-      run: |
-        python3 -m pip install --upgrade pip
-        # 锁定 buildozer 版本
-        pip3 install buildozer==1.5.0 virtualenv
-        # 强行降级 Cython 和 setuptools，避免底层编译报错！
-        pip3 install "cython==0.29.36" "setuptools<71.0.0"
+      - name: Accept Android SDK Licenses
+        run: |
+          # 强制接受所有 Android SDK 许可证
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          # 确保 Android SDK 工具已安装
+          sdkmanager "platform-tools" "build-tools;33.0.0" >/dev/null 2>&1 || true
 
-        # 开始打包
-        - name: Build with Buildozer
-          run: |
-            # 每次打包前，清理掉可能残留的旧编译文件
-            rm -rf .buildozer
-            export CFLAGS="${CFLAGS} -Wno-deprecated -Wno-deprecated-declarations"
-            export CXXFLAGS="${CXXFLAGS} -Wno-deprecated -Wno-deprecated-declarations"
-            buildozer -v android debug
+      - name: Install Buildozer
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install buildozer==1.5.0 virtualenv
+          pip3 install "cython==0.29.36" "setuptools<71.0.0"
 
+      - name: Pre-download Android SDK (optional but speeds up build)
+        run: |
+          # 提前下载 Android API，避免 Buildozer 运行时卡住
+          sdkmanager "platforms;android-33" >/dev/null 2>&1 || true
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: MyRadar-APK
-        path: bin/*.apk
+      - name: Build with Buildozer
+        env:
+          # 屏蔽 Cython DEF 弃用警告，避免日志被截断
+          CFLAGS: ${{ env.CFLAGS }} -Wno-deprecated -Wno-deprecated-declarations
+          CXXFLAGS: ${{ env.CXXFLAGS }} -Wno-deprecated -Wno-deprecated-declarations
+          # 让 Buildozer 更安静，减少日志体积
+          P4A_VERBOSE: '1'
+        run: |
+          # 每次打包前清理旧缓存
+          rm -rf .buildozer
+          # 开始打包
+          buildozer -v android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyRadar-APK
+          path: bin/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload Build Logs (for debugging)
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: Build-Logs
+          path: |
+            .buildozer/android/platform/build-*/dists/*/build.log
+          retention-days: 7
