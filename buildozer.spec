@@ -12,7 +12,8 @@ source.include_exts = py,png,jpg,kv,json,ttf,ttc
 version = 1.0.1
 
 # ⚠️ 核心：依赖库
-requirements = python3,kivy==2.3.0,requests,urllib3,plyer,android
+requirements = python3==3.10.12,kivy==2.3.0,Cython==0.29.33,jnius>=1.4.0,requests,urllib3,plyer,android
+android.ndk = 25b
 
 # 竖屏
 orientation = portrait
