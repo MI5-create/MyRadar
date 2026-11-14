@@ -23,17 +23,19 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
 
-    # 加入缓存：下次打包时，不再重新下载庞大的安卓 SDK/NDK，能节省 20 分钟！
+    # 开启缓存，加速下次打包
     - name: Cache Buildozer global directory
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
         key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
 
-    - name: Install Buildozer
+    - name: Install Buildozer and dependencies
       run: |
         python3 -m pip install --upgrade pip
         pip3 install --upgrade buildozer virtualenv
+        # 最关键的一行：强制锁定 Cython 版本，防止编译报错
+        pip3 install "cython==0.29.36"
 
     - name: Build with Buildozer
       run: |
