@@ -20,9 +20,11 @@ jobs:
 
     # 补全所有底层编译可能缺失的 C 语言依赖库（automake, libltdl-dev）
     - name: Install System Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool libltdl-dev pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool
+      # 强制在服务器端接受 Android SDK 许可证
+      echo "y" | sudo tee /dev/null | sudo android update sdk --no-ui --filter tools,platform-tools,android-33 --force
 
     # 直接安装，不使用缓存，保证环境绝对干净
     - name: Install Buildozer
