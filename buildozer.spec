@@ -9,7 +9,7 @@ source.include_exts = py,png,jpg,kv,json,ttf,ttc
 version = 1.0.1
 
 # 锁定最稳定的依赖版本
-requirements = python3.12,kivy==2.3.0,requests,urllib3,plyer,android
+requirements = python3.11,kivy==2.3.0,requests,urllib3,plyer,android
 
 orientation = portrait
 fullscreen = 0
