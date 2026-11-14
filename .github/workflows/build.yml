@@ -33,12 +33,15 @@ jobs:
         # 强行降级 Cython 和 setuptools，避免底层编译报错！
         pip3 install "cython==0.29.36" "setuptools<71.0.0"
 
-    # 开始打包
-    - name: Build with Buildozer
-      run: |
-        # 每次打包前，清理掉可能残留的旧编译文件
-        rm -rf .buildozer
-        buildozer -v android debug
+        # 开始打包
+        - name: Build with Buildozer
+          run: |
+            # 每次打包前，清理掉可能残留的旧编译文件
+            rm -rf .buildozer
+            export CFLAGS="${CFLAGS} -Wno-deprecated -Wno-deprecated-declarations"
+            export CXXFLAGS="${CXXFLAGS} -Wno-deprecated -Wno-deprecated-declarations"
+            buildozer -v android debug
+
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
