@@ -66,9 +66,9 @@ class FlightRadarRoot(BoxLayout):
         self.radar_view = None
         self._gps_started = False
         self._layout_mode = None
-        self._resize_event = None
         self._last_rows = []
         self.show_starred_only = False
+        self.current_tab = "list"
 
         header = BoxLayout(size_hint=(1, None), height=dp(44), spacing=SP_S)
         title_box = BoxLayout(size_hint_x=0.5, orientation="vertical",
@@ -89,8 +89,7 @@ class FlightRadarRoot(BoxLayout):
         header.add_widget(self.btn_star_filter)
         self.add_widget(header)
 
-        self.content_box = BoxLayout(size_hint=(1, 1), spacing=SP_S,
-                                     orientation="horizontal")
+        self.content_box = BoxLayout(size_hint=(1, 1), spacing=SP_S)
 
         self.flight_view = ScrollView()
         self.grid = GridLayout(cols=1, size_hint_y=None, spacing=SP_S)
@@ -113,14 +112,14 @@ class FlightRadarRoot(BoxLayout):
         self.btn_action.bind(on_press=self._on_action_click)
         bottom_bar.add_widget(self.btn_action)
 
-        self.btn_radar = Button(text="雷达", background_normal="",
-                                background_color=C_PRIMARY_DARK,
-                                color=(1, 1, 1, 1), bold=True)
-        self.btn_radar.bind(on_press=self._on_radar_click)
-        bottom_bar.add_widget(self.btn_radar)
+        self.btn_tab_switch = Button(text="硬件雷达", background_normal="",
+                                     background_color=C_PRIMARY_DARK,
+                                     color=(1, 1, 1, 1), bold=True)
+        self.btn_tab_switch.bind(on_press=self._on_tab_switch)
+        bottom_bar.add_widget(self.btn_tab_switch)
         self.add_widget(bottom_bar)
 
-        self._set_mode("split" if Window.width >= 1000 else "flight")
+        self.content_box.add_widget(self.flight_view)
         Window.bind(size=self._on_window_resize)
         Window.bind(on_pause=self._on_pause, on_resume=self._on_resume)
         Clock.schedule_once(lambda dt: self._ask_permission(), 0.3)
@@ -208,49 +207,7 @@ class FlightRadarRoot(BoxLayout):
         self.bg_rect.size = self.size
 
     def _on_window_resize(self, window, size):
-        if self._resize_event:
-            self._resize_event.cancel()
-        self._resize_event = Clock.schedule_once(lambda dt: self._apply_resize(size), 0.15)
-
-    def _apply_resize(self, size):
-        w = size[0]
-        if w >= 1400:
-            mode = "triple"
-        elif w >= 1000:
-            mode = "split"
-        else:
-            mode = "flight"
-        self._set_mode(mode)
-
-    def _set_mode(self, mode):
-        if mode == self._layout_mode:
-            return
-        self._layout_mode = mode
-        self.content_box.clear_widgets()
-
-        if mode == "flight":
-            self.content_box.orientation = "vertical"
-            self.flight_view.size_hint_x = 1
-            self.flight_view.size_hint_y = 1
-            self.radar_card.size_hint_x = 1
-            self.radar_card.size_hint_y = 0
-            self.content_box.add_widget(self.flight_view)
-        elif mode == "triple":
-            self.content_box.orientation = "horizontal"
-            self.flight_view.size_hint_x = 1
-            self.flight_view.size_hint_y = 1
-            self.radar_card.size_hint_x = 0.45
-            self.radar_card.size_hint_y = 1
-            self.content_box.add_widget(self.flight_view)
-            self.content_box.add_widget(self.radar_card)
-        else:
-            self.content_box.orientation = "horizontal"
-            self.flight_view.size_hint_x = 0.6
-            self.flight_view.size_hint_y = 1
-            self.radar_card.size_hint_x = 0.4
-            self.radar_card.size_hint_y = 1
-            self.content_box.add_widget(self.flight_view)
-            self.content_box.add_widget(self.radar_card)
+        pass
 
     def _toggle_star_filter(self, *a):
         self.show_starred_only = not self.show_starred_only
@@ -341,76 +298,6 @@ class FlightRadarRoot(BoxLayout):
         except Exception:
             pass
 
-        try:
-            radius_nm = int(RADIUS_KM / 1.852)
-            url = f"https://opendata.adsb.fi/api/v2/lat/{self.current_lat}/lon/{self.current_lon}/dist/{radius_nm}"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            resp = requests.get(url, headers=headers, timeout=15, verify=False)
-            resp.raise_for_status()
-            data = resp.json()
-            ac_list = data.get("ac", [])
-            
-            if ac_list:
-                rows = []
-                for ac in ac_list:
-                    callsign = (ac.get("flight") or "").strip()
-                    if not callsign: continue
-                    lat = ac.get("lat")
-                    lon = ac.get("lon")
-                    if lat is None or lon is None: continue
-                    
-                    alt = ac.get("alt_baro", 0)
-                    if alt == "ground": alt = 0
-                    spd = ac.get("gs", 0)
-                    track = ac.get("track", 0)
-                    hex_code = ac.get("hex", "fake")
-                    
-                    dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
-                    raw = [hex_code, callsign, "China", 0, 0, lon, lat, alt, 0, spd, track]
-                    rows.append((callsign, f"{alt}", f"{spd}", round(dist), raw))
-                
-                if rows:
-                    rows.sort(key=lambda x: x[3])
-                    Clock.schedule_once(lambda dt: self._on_success(rows[:150], "真实数据(备用)"), 0)
-                    return
-        except Exception:
-            pass
-
-        try:
-            d_lat = RADIUS_KM / 111.0
-            d_lon = RADIUS_KM / (111.0 * math.cos(math.radians(self.current_lat)))
-            bbox = (self.current_lat - d_lat, self.current_lat + d_lat,
-                    self.current_lon - d_lon, self.current_lon + d_lon)
-            headers = {"User-Agent": "Mozilla/5.0"}
-            headers.update(OpenSkyAuth.get_headers())
-            resp = requests.get(
-                "https://opensky-network.org/api/states/all",
-                params={"lamin": bbox[0], "lamax": bbox[1],
-                        "lomin": bbox[2], "lomax": bbox[3]},
-                headers=headers, timeout=15, verify=False)
-            resp.raise_for_status()
-            states = resp.json().get("states")
-            
-            if states:
-                rows = []
-                for s in states:
-                    if not isinstance(s, list) or len(s) < 11: continue
-                    callsign = (s[1] or "").strip()
-                    if not callsign: continue
-                    lon, lat = s[5], s[6]
-                    if lat is None or lon is None: continue
-                    dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
-                    alt = s[7] if s[7] is not None else 0
-                    spd = s[9] if s[9] is not None else 0
-                    rows.append((callsign, f"{alt:.0f}", f"{spd:.0f}", round(dist), s))
-                
-                if rows:
-                    rows.sort(key=lambda x: x[3])
-                    Clock.schedule_once(lambda dt: self._on_success(rows[:150], "真实数据(OS)"), 0)
-                    return
-        except Exception:
-            pass
-
         def fail_callback(dt):
             self.status_label.text = "网络受限或周围无航班"
             self._refresh_display()
@@ -440,45 +327,32 @@ class FlightRadarRoot(BoxLayout):
         a = (math.sin(dp_ / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2)
         return 2 * R * math.asin(math.sqrt(a))
 
-    def _on_radar_click(self, instance):
-        if self._layout_mode == "flight":
-            if self.btn_radar.text == "断开雷达":
-                if self.radar_source:
-                    self.radar_source.stop()
-                self.btn_radar.text = "雷达"
-                self.btn_radar.background_color = C_PRIMARY_DARK
-                self.content_box.clear_widgets()
-                self.content_box.add_widget(self.flight_view)
-                return
-            else:
-                self.btn_radar.text = "断开雷达"
-                self.btn_radar.background_color = C_TAG_RED
-                self.content_box.clear_widgets()
-                self.content_box.add_widget(self.radar_card)
-                
-                self.radar_status.text = "等待数据…"
-                self.radar_box.clear_widgets()
-                self.radar_view = RadarView(size_hint=(1, 1))
-                self.radar_box.add_widget(self.radar_view)
-                self.radar_source = RadarSource(self._radar_data, self._radar_status)
-                self.radar_source.start()
-                return
-
-        if self.btn_radar.text == "断开雷达":
+    def _on_tab_switch(self, instance):
+        self.content_box.clear_widgets()
+        if self.current_tab == "list":
+            self.current_tab = "radar"
+            self.btn_tab_switch.text = "航班列表"
+            
+            self.radar_status.text = "雷达未连接"
+            self.radar_box.clear_widgets()
+            self.radar_box.add_widget(self.radar_status)
+            
+            self.content_box.add_widget(self.radar_card)
+            
             if self.radar_source:
                 self.radar_source.stop()
-            self.btn_radar.text = "连接雷达"
-            self.btn_radar.background_color = C_PRIMARY_DARK
-            self.radar_status.text = "雷达未连接"
-            return
-        self.btn_radar.text = "连接中…"
-        self.btn_radar.background_color = C_TEXT_SUB
-        self.radar_status.text = "等待数据…"
-        self.radar_box.clear_widgets()
-        self.radar_view = RadarView(size_hint=(1, 1))
-        self.radar_box.add_widget(self.radar_view)
-        self.radar_source = RadarSource(self._radar_data, self._radar_status)
-        self.radar_source.start()
+            self.radar_status.text = "等待数据…"
+            self.radar_box.clear_widgets()
+            self.radar_view = RadarView(size_hint=(1, 1))
+            self.radar_box.add_widget(self.radar_view)
+            self.radar_source = RadarSource(self._radar_data, self._radar_status)
+            self.radar_source.start()
+        else:
+            self.current_tab = "list"
+            self.btn_tab_switch.text = "硬件雷达"
+            self.content_box.add_widget(self.flight_view)
+            if self.radar_source:
+                self.radar_source.stop()
 
     def _radar_status(self, text):
         Clock.schedule_once(lambda dt: self._set_radar_status_ui(text), 0)
