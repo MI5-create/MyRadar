@@ -16,15 +16,15 @@ jobs:
     - name: Build with Buildozer in Docker
       run: |
         echo "=== 1. 正在拉取官方 Kivy 打包镜像 ==="
-        docker pull kivy/buildozer:latest
+        # 👇 关键修改：使用固定版本的镜像，而不是 latest
+        docker pull kivy/buildozer:2023.09.15
         
         echo "=== 2. 开始编译 APK ==="
-        # 关键修复：在 buildozer 命令前加上 echo 'y' |，自动回答 root 权限确认
         docker run --rm \
           -v ${{ github.workspace }}:/home/user/hostcwd \
           -w /home/user/hostcwd \
           --entrypoint /bin/bash \
-          kivy/buildozer:latest \
+          kivy/buildozer:2023.09.15 \
           -c "echo 'y' | buildozer -v android debug"
 
     - name: Upload APK
