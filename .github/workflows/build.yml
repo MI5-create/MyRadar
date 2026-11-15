@@ -8,25 +8,31 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Build with Buildozer in Docker
-      run: |
-        # 拉取官方最新镜像，里面自带完美的编译环境
-        docker pull kivy/buildozer:latest
-        
-        # 启动镜像并开始编译，加了 echo 'y' 防止 root 权限卡住
-        docker run --rm \
-          -v ${{ github.workspace }}:/home/user/hostcwd \
-          -w /home/user/hostcwd \
-          --entrypoint /bin/bash \
-          kivy/buildozer:latest \
-          -c "echo 'y' | buildozer -v android debug"
+      - name: Cache Buildozer global components
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: MyRadar-APK
-        path: bin/*.apk
+      - name: Build with Buildozer in Docker
+        run: |
+          docker run --rm -u root \
+            -v ${{ github.workspace }}:/home/user/hostcwd \
+            -v $HOME/.buildozer:/root/.buildozer \
+            -w /home/user/hostcwd \
+            --entrypoint /bin/bash \
+            kivy/buildozer:latest \
+            -c "export MAKEFLAGS='-j1' && rm -rf .buildozer && buildozer -v android debug"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyRadar-APK
+          path: bin/*.apk
