@@ -5,7 +5,7 @@ package.domain = org.test
 source.dir = .
 source.include_exts = py,png,jpg,kv,json,ttf,TTF,otf
 version = 1.0.1
-requirements = python3==3.10.12,kivy==2.2.1,cython==0.29.36,requests,urllib3,plyer,certifi,openssl
+requirements = python3==3.10.12,kivy==2.3.0,cython==0.29.36,requests,urllib3,plyer,certifi
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
