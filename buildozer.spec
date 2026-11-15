@@ -1,34 +1,25 @@
 [app]
-
-# 1. 应用基本信息
-title = MyRadar
+title = Flight Echo
 package.name = myradar
-package.domain = org.miradar
-
-# 2. 源码入口
+package.domain = org.test
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas
+source.include_exts = py,png,jpg,kv,json,ttf,ttc
+version = 1.0.1
 
-# 3. 核心依赖（不要在里面写 arch 架构！）
-requirements = python3,kivy,requests,urllib3,plyer,android
+# 锁死所有版本，极其关键！
+requirements = python3==3.10.12,kivy==2.2.1,cython==0.29.36,requests,urllib3,plyer,android
 
-# 4. 屏幕方向与全屏
 orientation = portrait
 fullscreen = 0
 
-# 5. Android 专属配置
+android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+
 android.api = 31
 android.minapi = 24
 android.archs = arm64-v8a
+android.ndk = 23b
 android.accept_sdk_license = True
 
-# 6. 权限配置（GPS + 网络）
-android.permissions = INTERNET, ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION
-
 [buildozer]
-
-# 7. 构建目录与日志级别
-build_dir = ./.buildozer
-bin_dir = ./bin
 log_level = 2
 warn_on_root = 1
