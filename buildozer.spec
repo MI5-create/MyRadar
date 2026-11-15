@@ -6,8 +6,8 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,json,ttf,ttc
 version = 1.0.1
 
-# 锁定 Python、Kivy、Cython 版本。去掉了容易引发底层冲突的 android 独立包
-requirements = python3==3.10.12,kivy==2.2.1,cython==0.29.36,requests,urllib3,plyer
+# 经典组合，依赖全部交给 Docker
+requirements = python3,kivy==2.2.1,requests,urllib3,plyer,android,cython==0.29.36
 
 orientation = portrait
 fullscreen = 0
@@ -23,4 +23,3 @@ android.accept_sdk_license = True
 [buildozer]
 log_level = 2
 warn_on_root = 1
-make_jobs = 2
