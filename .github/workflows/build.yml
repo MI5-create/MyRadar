@@ -13,18 +13,20 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # 直接使用官方 Docker 命令行，彻底告别第三方插件的玄学报错
+    # 使用官方 Docker 镜像进行纯净打包
     - name: Build with Buildozer in Docker
       run: |
         echo "=== 1. 正在拉取官方 Kivy 打包镜像 ==="
         docker pull kivy/buildozer:latest
         
         echo "=== 2. 开始编译 APK ==="
-        # 将当前工作区映射到容器的 /home/user/hostcwd 目录
+        # 关键修复：使用 --entrypoint /bin/bash 覆盖默认入口，用 -w 指定工作目录
         docker run --rm \
           -v ${{ github.workspace }}:/home/user/hostcwd \
+          -w /home/user/hostcwd \
+          --entrypoint /bin/bash \
           kivy/buildozer:latest \
-          bash -c "cd /home/user/hostcwd && rm -rf .buildozer && buildozer -v android debug"
+          -c "rm -rf .buildozer && buildozer -v android debug"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
