@@ -12,16 +12,21 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # 使用官方社区的打包 Action，它里面自带了完美配置的环境
-    - name: Build with Buildozer
-      uses: ArtemSBulgakov/buildozer-action@v1
-      id: buildozer
-      with:
-        command: buildozer android debug
-        buildozer_version: stable
+    - name: Build with Buildozer in Docker
+      run: |
+        # 拉取官方最新镜像，里面自带完美的编译环境
+        docker pull kivy/buildozer:latest
+        
+        # 启动镜像并开始编译，加了 echo 'y' 防止 root 权限卡住
+        docker run --rm \
+          -v ${{ github.workspace }}:/home/user/hostcwd \
+          -w /home/user/hostcwd \
+          --entrypoint /bin/bash \
+          kivy/buildozer:latest \
+          -c "echo 'y' | buildozer -v android debug"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: MyRadar-APK
-        path: ${{ steps.buildozer.outputs.filename }}
+        path: bin/*.apk
