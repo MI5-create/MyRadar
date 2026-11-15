@@ -7,24 +7,24 @@ on:
 
 jobs:
   build-android:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # 直接使用 Kivy 官方提供的 Docker 镜像，里面包含所有完美配置的编译环境
+    # 直接使用官方 Docker 命令行，彻底告别第三方插件的玄学报错
     - name: Build with Buildozer in Docker
-      uses: addnab/docker-run-action@v3
-      with:
-        image: kivy/buildozer:latest
-        options: -v ${{ github.workspace }}:/home/user/hostcwd
-        run: |
-          cd /home/user/hostcwd
-          # 每次清理，防止旧错误残留
-          rm -rf .buildozer
-          # 直接编译
-          buildozer -v android debug
+      run: |
+        echo "=== 1. 正在拉取官方 Kivy 打包镜像 ==="
+        docker pull kivy/buildozer:latest
+        
+        echo "=== 2. 开始编译 APK ==="
+        # 将当前工作区映射到容器的 /home/user/hostcwd 目录
+        docker run --rm \
+          -v ${{ github.workspace }}:/home/user/hostcwd \
+          kivy/buildozer:latest \
+          bash -c "cd /home/user/hostcwd && rm -rf .buildozer && buildozer -v android debug"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
