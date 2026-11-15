@@ -33,8 +33,8 @@ jobs:
       run: |
         python3 -m pip install --upgrade pip
         pip3 install buildozer virtualenv
-        # 强制锁定关键版本
-        pip3 install "cython==0.29.33" "setuptools<71.0.0" "sh<2.0"
+        # 必须锁死 Cython < 3.0，这是官方给的最新建议
+        pip3 install "cython<3.0" "setuptools<71.0.0" "sh<2.0"
 
     - name: Build with Buildozer
       run: |
