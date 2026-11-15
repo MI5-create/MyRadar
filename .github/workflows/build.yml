@@ -2,33 +2,26 @@ name: Build APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
   build-android:
-    runs-on: ubuntu-22.04
-    
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Build with Buildozer in Docker
-      run: |
-        echo "=== 1. 正在拉取官方 Kivy 打包镜像 ==="
-        # 👇 关键修改：使用固定版本的镜像，而不是 latest
-        docker pull kivy/buildozer:2023.09.15
-        
-        echo "=== 2. 开始编译 APK ==="
-        docker run --rm \
-          -v ${{ github.workspace }}:/home/user/hostcwd \
-          -w /home/user/hostcwd \
-          --entrypoint /bin/bash \
-          kivy/buildozer:2023.09.15 \
-          -c "echo 'y' | buildozer -v android debug"
+    # 使用官方社区的打包 Action，它里面自带了完美配置的环境
+    - name: Build with Buildozer
+      uses: ArtemSBulgakov/buildozer-action@v1
+      id: buildozer
+      with:
+        command: buildozer android debug
+        buildozer_version: stable
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: MyRadar-APK
-        path: bin/*.apk
+        path: ${{ steps.buildozer.outputs.filename }}
