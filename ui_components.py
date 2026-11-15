@@ -26,7 +26,6 @@ from config import (
 )
 from storage import get_store
 
-
 class GlassCard(BoxLayout):
     def __init__(self, bg_color=C_GLASS, radius=16, **kwargs):
         super().__init__(**kwargs)
@@ -55,13 +54,12 @@ class GlassCard(BoxLayout):
         self._border.rounded_rectangle = (
             self.x, self.y, self.width, self.height, self.radius)
 
-
 class FlightCard(GlassCard):
     def __init__(self, callsign, alt, spd, dist, raw_data, on_click,
                  on_toggle_star=None, **kwargs):
         super().__init__(bg_color=C_GLASS, radius=12,
-                         size_hint=(1, None), height=dp(74),
-                         padding=[SP_M, SP_M], spacing=SP_M, **kwargs)
+                         size_hint=(1, None), height=dp(72),
+                         padding=[dp(6), dp(8)], spacing=dp(6), **kwargs)
         self.raw_data = raw_data
         self.on_click = on_click
         self.callsign = callsign
@@ -70,52 +68,61 @@ class FlightCard(GlassCard):
 
         cn_name, _ = get_airline_info(callsign)
 
-        badge = BoxLayout(orientation="vertical", size_hint_x=None, width=dp(58),
+        badge = BoxLayout(orientation="vertical", size_hint_x=None, width=dp(52),
                           spacing=dp(2))
-        badge.add_widget(Label(text=cn_name, color=C_TEXT_MAIN,
-                               font_size="12sp", bold=True, halign="center",
-                               valign="middle", shorten=True, shorten_from="right"))
-        badge.add_widget(Label(text=f"{alt} m", color=C_TEXT_SUB,
+        
+        lbl_name = Label(text=cn_name, color=C_TEXT_MAIN,
+                         font_size="11sp", bold=True, halign="center",
+                         valign="middle")
+        lbl_name.bind(size=lbl_name.setter('text_size'))
+        badge.add_widget(lbl_name)
+        
+        badge.add_widget(Label(text=f"{alt}m", color=C_TEXT_SUB,
                                font_size="10sp", halign="center"))
         self.add_widget(badge)
 
-        mid = BoxLayout(orientation="vertical", spacing=dp(2))
+        mid = BoxLayout(orientation="vertical", spacing=dp(2), size_hint_x=1)
+        
         name_lbl = Label(text=callsign.strip(), color=C_TEXT_MAIN,
-                         font_size="17sp", bold=True, halign="left",
+                         font_size="16sp", bold=True, halign="left",
                          valign="middle")
         name_lbl.bind(size=name_lbl.setter("text_size"))
         mid.add_widget(name_lbl)
+        
         info_lbl = Label(text=f"地速 {spd} m/s", color=C_TEXT_SUB,
                          font_size="11sp", halign="left")
         info_lbl.bind(size=info_lbl.setter("text_size"))
         mid.add_widget(info_lbl)
+        
         self.add_widget(mid)
 
-        # 关注按钮
         star = Button(text="已关注" if self.is_starred else "+ 关注",
                       background_normal="", 
                       background_color=C_GOLD if self.is_starred else C_PRIMARY,
                       color=(1, 1, 1, 1),
-                      font_size="12sp", 
-                      size_hint=(None, None), size=(dp(56), dp(32)),
+                      font_size="11sp", 
+                      size_hint=(None, None), size=(dp(48), dp(28)),
                       pos_hint={"center_y": 0.5})
         star.bind(on_press=self._on_star)
         self.add_widget(star)
         self.star_btn = star
 
-        tag = BoxLayout(size_hint_x=None, width=dp(64),
-                        pos_hint={"center_y": 0.5}, padding=[dp(2), dp(2)])
+        tag = BoxLayout(size_hint_x=None, width=dp(50),
+                        pos_hint={"center_y": 0.5})
         with tag.canvas.before:
             Color(*C_PRIMARY_SOFT)
             self._tag_rect = RoundedRectangle(pos=tag.pos, size=tag.size,
-                                              radius=[dp(8)])
+                                              radius=[dp(6)])
         def _tag_update(*a):
             self._tag_rect.pos = tag.pos
             self._tag_rect.size = tag.size
         tag.bind(pos=_tag_update, size=_tag_update)
-        tag.add_widget(Label(text=f"{dist} km", color=C_PRIMARY,
-                             font_size="11sp", bold=True, halign="center",
-                             valign="middle"))
+        
+        dist_lbl = Label(text=f"{dist}km", color=C_PRIMARY,
+                         font_size="11sp", bold=True, halign="center",
+                         valign="middle")
+        dist_lbl.bind(size=dist_lbl.setter('text_size'))
+        tag.add_widget(dist_lbl)
         self.add_widget(tag)
 
     def _on_star(self, *a):
@@ -137,7 +144,6 @@ class FlightCard(GlassCard):
                 self.on_click(self.raw_data)
             return True
         return super().on_touch_down(touch)
-
 
 class TacticalRadarView(RelativeLayout):
     def __init__(self, **kwargs):
@@ -164,7 +170,6 @@ class TacticalRadarView(RelativeLayout):
             self.line_h = Line(width=1.0)
             self.line_v = Line(width=1.0)
             
-            # 绿色扫描线
             Color(0.2, 0.9, 0.4, 0.8)
             self.scan_line = Line(width=2.5)
             
@@ -185,12 +190,9 @@ class TacticalRadarView(RelativeLayout):
             self.add_widget(lbl)
 
         self.bind(pos=self._layout, size=self._layout)
-        
-        # Clock 驱动一切
         self._ev = Clock.schedule_interval(self._update_anim, 0.05)
 
     def _update_anim(self, dt):
-        # 1. 扫描线旋转
         self.scan_angle = (self.scan_angle + 6) % 360
         
         w, h = self.width, self.height
@@ -198,12 +200,10 @@ class TacticalRadarView(RelativeLayout):
             cx, cy = w / 2.0, h / 2.0
             radius = min(w, h) / 2.0 - 30
             rad = radians(self.scan_angle)
-            # 修复坐标计算：sin 算 X，cos 算 Y
             self.scan_line.points = [cx, cy, cx + radius * sin(rad), cy + radius * cos(rad)]
 
-        # 2. 红点移动
         if self.flight_lat is not None and self.flight_spd > 0:
-            multiplier = 30 # 30倍速
+            multiplier = 30
             dist_m = self.flight_spd * dt * multiplier
             self.flight_lat += (dist_m * cos(radians(self.flight_heading))) / 111000.0
             self.flight_lon += (dist_m * sin(radians(self.flight_heading))) / (111000.0 * cos(radians(self.flight_lat)))
@@ -270,7 +270,6 @@ class TacticalRadarView(RelativeLayout):
         if self.flight_lat is not None:
             r = (min(self.dist_to_center, self.max_range) / self.max_range) * radius
             rad = radians(self.bearing)
-            # 修复坐标计算：sin 算 X（左右），cos 算 Y（上下）
             px = cx + r * sin(rad)
             py = cy + r * cos(rad)
             self.glow.pos = (px - 9, py - 9)
@@ -279,14 +278,13 @@ class TacticalRadarView(RelativeLayout):
             self.glow.pos = (-100, -100)
             self.dot.pos = (-100, -100)
 
-
 class FlightDetailPopup(ModalView):
     def __init__(self, raw_data, center_lat, center_lon, on_star_change=None, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (0.90, 0.86)
         self.background_color = (0, 0, 0, 0.38)
         self.icao24 = raw_data[0]
-        self.raw_data = raw_data # 保存引用，以便在关闭时更新坐标
+        self.raw_data = raw_data
         self.on_star_change = on_star_change
 
         root = GlassCard(bg_color=C_GLASS, radius=20,
@@ -344,7 +342,6 @@ class FlightDetailPopup(ModalView):
         radar_container.add_widget(self.radar_view)
         root.add_widget(radar_container)
 
-        # 底部操作栏
         btn_box = BoxLayout(size_hint_y=None, height=dp(60),
                             padding=[SP_L, 0, SP_L, SP_L], spacing=SP_M)
         
@@ -368,23 +365,10 @@ class FlightDetailPopup(ModalView):
                          args=(callsign, iata_code), daemon=True).start()
 
     def dismiss(self, *args):
-        # 1. 把最新推演出的位置写回原始数据，防止下次打开“从头播放”
-        if hasattr(self.radar_view, 'flight_lat') and self.radar_view.flight_lat is not None:
-            if isinstance(self.raw_data, list) and len(self.raw_data) >= 7:
-                self.raw_data[6] = self.radar_view.flight_lat
-                self.raw_data[5] = self.radar_view.flight_lon
-
-        # 2. 停止雷达定时器
         if hasattr(self.radar_view, '_ev') and self.radar_view._ev:
             self.radar_view._ev.cancel()
-        
-        # 3. 强行清空弹窗里的所有 UI 元素，防止留下“幽灵按钮”
         self.clear_widgets()
-        
-        # 4. 调用父类关闭
         super().dismiss()
-        
-        # 5. 弹窗关闭后，延迟 0.1 秒通知底层主界面更新对应卡片
         if self.on_star_change:
             Clock.schedule_once(lambda dt: self.on_star_change(self.callsign), 0.1)
 
@@ -392,8 +376,6 @@ class FlightDetailPopup(ModalView):
         info = {"lat": 0, "lon": 0, "alt": 0, "spd": 0, "ts": time.time()}
         now = get_store().toggle_star(self.callsign, info)
         self.is_starred = now
-        
-        # 仅更新弹窗内的按钮状态，不关闭弹窗
         self.star_btn.text = "已关注" if now else "+ 关注此航班"
         self.star_btn.background_color = C_GOLD if now else C_PRIMARY
 
@@ -469,14 +451,12 @@ class FlightDetailPopup(ModalView):
         except Exception:
             pass
 
-
 class RadarView(RelativeLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.points = []
         self.scan_angle = 0
         
-        # --- 1. 静态背景层 (只画一次) ---
         with self.canvas.before:
             Color(*C_RADAR_BG)
             self.bg_rect = RoundedRectangle(radius=[16])
@@ -486,17 +466,13 @@ class RadarView(RelativeLayout):
             self.line_h = Line(width=1.0)
             self.line_v = Line(width=1.0)
             
-        # --- 2. 动态图层 (扫描线 + 散点) ---
         with self.canvas:
-            # 绿色扫描线
             Color(0.2, 0.9, 0.4, 0.6)
             self.scan_line = Line(width=2.5)
             
-            # 存放红点的组
             self.points_group = InstructionGroup()
             self.canvas.add(self.points_group)
 
-        # 方位字母
         self.labels = {}
         for t in ["N", "S", "W", "E"]:
             lbl = Label(text=t, color=C_RADAR_GRID, bold=True,
@@ -507,7 +483,6 @@ class RadarView(RelativeLayout):
             self.add_widget(lbl)
 
         self.bind(pos=self._layout, size=self._layout)
-        # 驱动扫描线旋转的定时器
         self._ev = Clock.schedule_interval(self._update_anim, 0.05)
 
     def _update_anim(self, dt):
@@ -517,7 +492,6 @@ class RadarView(RelativeLayout):
         cx, cy = w / 2.0, h / 2.0
         r = min(w, h) / 2 - 30
         
-        # 修复坐标计算
         rad = radians(self.scan_angle)
         self.scan_line.points = [cx, cy, cx + r * sin(rad), cy + r * cos(rad)]
 
@@ -536,13 +510,11 @@ class RadarView(RelativeLayout):
         cx, cy = w / 2.0, h / 2.0
         r = min(w, h) / 2 - 30
 
-        # 更新网格位置
         self.line_out.circle = (cx, cy, r)
         self.line_in.circle = (cx, cy, r * 0.5)
         self.line_h.points = [cx - r, cy, cx + r, cy]
         self.line_v.points = [cx, cy - r, cx, cy + r]
 
-        # 更新字母位置
         self.labels["N"].pos = (cx - dp(13), cy + r - 15 - dp(13))
         self.labels["S"].pos = (cx - dp(13), cy - r + 15 - dp(13))
         self.labels["W"].pos = (cx - r + 15 - dp(13), cy - dp(13))
@@ -557,7 +529,6 @@ class RadarView(RelativeLayout):
         cx, cy = w / 2.0, h / 2.0
         r = min(w, h) / 2 - 30
 
-        # 遍历所有传入的点并重绘
         for a, d in self.points:
             pr = min(d / 200, 1.0) * r
             rad = radians(a)
@@ -570,7 +541,6 @@ class RadarView(RelativeLayout):
         if parent is None:
             if hasattr(self, '_ev') and self._ev:
                 self._ev.cancel()
-
 
 class PermissionPopup(ModalView):
     def __init__(self, on_done, **kwargs):
