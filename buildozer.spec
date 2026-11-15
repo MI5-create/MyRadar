@@ -1,10 +1,10 @@
 [app]
-title = FlightEcho
+title = Flight Echo
 package.name = myradar
 package.domain = org.example
 source.dir = .
 source.include_exts = py,png,jpg,kv,json,ttf,TTF,otf
-version = 1.0.1
+version = 1.0.12
 
 requirements = python3==3.10.12,hostpython3==3.10.12,kivy==2.2.1,cython==0.29.36,requests,urllib3,plyer
 
