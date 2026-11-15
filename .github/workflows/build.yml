@@ -1,29 +1,43 @@
 name: Build APK
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
   build-android:
     runs-on: ubuntu-22.04
-    steps:
-    - uses: actions/checkout@v4
     
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        
-    - name: Install Buildozer
+
+    # 补全所有底层 C 语言编译必须的库，包含修复宿主机 Python 的 bz2/sqlite 等
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool libltdl-dev pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev ccache build-essential libbz2-dev libsqlite3-dev libreadline-dev
+
+    # 纯净安装，无缓存，防止之前失败的错误环境残留
+    - name: Install Buildozer and dependencies
       run: |
         python3 -m pip install --upgrade pip
-        pip3 install buildozer virtualenv
-        # 再次强锁 Cython，绝不妥协
-        pip3 install "cython==0.29.36" "setuptools<71.0.0"
+        pip3 install buildozer==1.5.0 virtualenv
+        # 强制锁定底层依赖版本，避坑 sh 2.0 破坏性更新及 setuptools 兼容性
+        pip3 install "cython==0.29.36" "setuptools<71.0.0" "sh<2.0"
 
-    - name: Build APK
+    - name: Build with Buildozer
       run: |
+        # 限制并发，死保 7GB 内存不溢出
+        export MAKEFLAGS="-j2"
         rm -rf .buildozer
-        buildozer android debug
+        buildozer -v android debug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
