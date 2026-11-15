@@ -13,19 +13,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Cache Buildozer global components
-        uses: actions/cache@v4
-        with:
-          path: ~/.buildozer
-          key: buildozer-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-
-
       - name: Build with Buildozer in Docker
         run: |
           docker run --rm -u root \
             -v ${{ github.workspace }}:/home/user/hostcwd \
-            -v $HOME/.buildozer:/root/.buildozer \
             -w /home/user/hostcwd \
             --entrypoint /bin/bash \
             kivy/buildozer:latest \
