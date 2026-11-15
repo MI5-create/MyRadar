@@ -14,7 +14,6 @@ except Exception:
     pass
 
 import math
-import random
 import threading
 import requests
 
@@ -28,7 +27,6 @@ from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.textinput import TextInput
 
 try:
     from plyer import gps
@@ -48,12 +46,11 @@ from ui_components import (
     GlassCard, FlightCard, RadarView, FlightDetailPopup, PermissionPopup,
 )
 
-
 class FlightRadarRoot(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(orientation="vertical",
-                         padding=[SP_L, dp(36), SP_L, SP_L],
-                         spacing=SP_M)
+                         padding=[SP_S, dp(30), SP_S, SP_S],
+                         spacing=SP_S)
         with self.canvas.before:
             Color(*C_BG)
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
@@ -73,31 +70,26 @@ class FlightRadarRoot(BoxLayout):
         self._last_rows = []
         self.show_starred_only = False
 
-        # === 头部布局 (已去掉搜索框) ===
-        header = BoxLayout(size_hint=(1, None), height=dp(50), spacing=SP_M)
-        
-        # 左侧标题
-        title_box = BoxLayout(size_hint_x=1, orientation="vertical",
+        header = BoxLayout(size_hint=(1, None), height=dp(44), spacing=SP_S)
+        title_box = BoxLayout(size_hint_x=0.5, orientation="vertical",
                               spacing=dp(0), padding=[0, dp(2)])
         title_box.add_widget(Label(text="航班雷达", color=C_TEXT_MAIN,
-                                   font_size="22sp", bold=True,
+                                   font_size="20sp", bold=True,
                                    halign="left", valign="bottom"))
         self.status_label = Label(text="定位中…", color=C_TEXT_SUB,
-                                  font_size="12sp", halign="left", valign="top")
+                                  font_size="11sp", halign="left", valign="top")
         title_box.add_widget(self.status_label)
         header.add_widget(title_box)
 
-        # 右侧星座筛选按钮
         self.btn_star_filter = Button(text="★ 星座", background_normal="",
                                       background_color=C_GOLD,
                                       color=(1, 1, 1, 1), bold=True,
-                                      size_hint_x=None, width=dp(90), font_size="14sp")
+                                      size_hint_x=0.5, font_size="13sp")
         self.btn_star_filter.bind(on_press=self._toggle_star_filter)
         header.add_widget(self.btn_star_filter)
-        
         self.add_widget(header)
 
-        self.content_box = BoxLayout(size_hint=(1, 1), spacing=SP_M,
+        self.content_box = BoxLayout(size_hint=(1, 1), spacing=SP_S,
                                      orientation="horizontal")
 
         self.flight_view = ScrollView()
@@ -114,14 +106,14 @@ class FlightRadarRoot(BoxLayout):
         self.radar_card.add_widget(self.radar_box)
         self.add_widget(self.content_box)
 
-        bottom_bar = BoxLayout(size_hint=(1, None), height=dp(52), spacing=SP_M)
+        bottom_bar = BoxLayout(size_hint=(1, None), height=dp(48), spacing=SP_S)
         self.btn_action = Button(text="自动刷新", background_normal="",
                                  background_color=C_PRIMARY,
                                  color=(1, 1, 1, 1), bold=True)
         self.btn_action.bind(on_press=self._on_action_click)
         bottom_bar.add_widget(self.btn_action)
 
-        self.btn_radar = Button(text="连接雷达", background_normal="",
+        self.btn_radar = Button(text="雷达", background_normal="",
                                 background_color=C_PRIMARY_DARK,
                                 color=(1, 1, 1, 1), bold=True)
         self.btn_radar.bind(on_press=self._on_radar_click)
@@ -139,7 +131,7 @@ class FlightRadarRoot(BoxLayout):
                 self._start_gps()
                 self.status_label.text = "权限已授予"
             else:
-                self.status_label.text = "部分权限被拒 · 使用备用位置"
+                self.status_label.text = "权限受限·使用备用位置"
                 self._load_cache()
         PermissionPopup(on_done=on_done).open()
 
@@ -169,7 +161,7 @@ class FlightRadarRoot(BoxLayout):
 
     def _start_gps(self):
         if not HAS_GPS:
-            self.status_label.text = "GPS 不可用 · 使用备用位置"
+            self.status_label.text = "GPS不可用·使用备用"
             self._load_cache()
             return
         try:
@@ -239,11 +231,10 @@ class FlightRadarRoot(BoxLayout):
         if mode == "flight":
             self.content_box.orientation = "vertical"
             self.flight_view.size_hint_x = 1
-            self.flight_view.size_hint_y = 0.62
+            self.flight_view.size_hint_y = 1
             self.radar_card.size_hint_x = 1
-            self.radar_card.size_hint_y = 0.38
+            self.radar_card.size_hint_y = 0
             self.content_box.add_widget(self.flight_view)
-            self.content_box.add_widget(self.radar_card)
         elif mode == "triple":
             self.content_box.orientation = "horizontal"
             self.flight_view.size_hint_x = 1
@@ -276,14 +267,11 @@ class FlightRadarRoot(BoxLayout):
 
     def _on_star_change(self, callsign):
         is_now = get_store().is_starred(callsign)
-        
-        # 局部更新主界面上的卡片状态
         for child in self.grid.children:
             if getattr(child, "callsign", None) == callsign:
                 child.is_starred = is_now
                 child.star_btn.text = "已关注" if is_now else "+ 关注"
                 child.star_btn.background_color = C_GOLD if is_now else C_PRIMARY
-
         if self.show_starred_only:
             self._refresh_display()
 
@@ -319,6 +307,76 @@ class FlightRadarRoot(BoxLayout):
 
     def _worker(self):
         try:
+            radius_nm = int(RADIUS_KM / 1.852)
+            url = f"https://api.airplanes.live/v2/point/{self.current_lat}/{self.current_lon}/{radius_nm}"
+            headers = {"User-Agent": "Mozilla/5.0"}
+            resp = requests.get(url, headers=headers, timeout=15, verify=False)
+            resp.raise_for_status()
+            data = resp.json()
+            ac_list = data.get("ac", [])
+            
+            if ac_list:
+                rows = []
+                for ac in ac_list:
+                    callsign = (ac.get("flight") or "").strip()
+                    if not callsign: continue
+                    lat = ac.get("lat")
+                    lon = ac.get("lon")
+                    if lat is None or lon is None: continue
+                    
+                    alt = ac.get("alt_baro", 0)
+                    if alt == "ground": alt = 0
+                    spd = ac.get("gs", 0)
+                    track = ac.get("track", 0)
+                    hex_code = ac.get("hex", "fake")
+                    
+                    dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
+                    raw = [hex_code, callsign, "China", 0, 0, lon, lat, alt, 0, spd, track]
+                    rows.append((callsign, f"{alt}", f"{spd}", round(dist), raw))
+                
+                if rows:
+                    rows.sort(key=lambda x: x[3])
+                    Clock.schedule_once(lambda dt: self._on_success(rows[:150], "真实数据(ADS-B)"), 0)
+                    return
+        except Exception:
+            pass
+
+        try:
+            radius_nm = int(RADIUS_KM / 1.852)
+            url = f"https://opendata.adsb.fi/api/v2/lat/{self.current_lat}/lon/{self.current_lon}/dist/{radius_nm}"
+            headers = {"User-Agent": "Mozilla/5.0"}
+            resp = requests.get(url, headers=headers, timeout=15, verify=False)
+            resp.raise_for_status()
+            data = resp.json()
+            ac_list = data.get("ac", [])
+            
+            if ac_list:
+                rows = []
+                for ac in ac_list:
+                    callsign = (ac.get("flight") or "").strip()
+                    if not callsign: continue
+                    lat = ac.get("lat")
+                    lon = ac.get("lon")
+                    if lat is None or lon is None: continue
+                    
+                    alt = ac.get("alt_baro", 0)
+                    if alt == "ground": alt = 0
+                    spd = ac.get("gs", 0)
+                    track = ac.get("track", 0)
+                    hex_code = ac.get("hex", "fake")
+                    
+                    dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
+                    raw = [hex_code, callsign, "China", 0, 0, lon, lat, alt, 0, spd, track]
+                    rows.append((callsign, f"{alt}", f"{spd}", round(dist), raw))
+                
+                if rows:
+                    rows.sort(key=lambda x: x[3])
+                    Clock.schedule_once(lambda dt: self._on_success(rows[:150], "真实数据(备用)"), 0)
+                    return
+        except Exception:
+            pass
+
+        try:
             d_lat = RADIUS_KM / 111.0
             d_lon = RADIUS_KM / (111.0 * math.cos(math.radians(self.current_lat)))
             bbox = (self.current_lat - d_lat, self.current_lat + d_lat,
@@ -329,51 +387,35 @@ class FlightRadarRoot(BoxLayout):
                 "https://opensky-network.org/api/states/all",
                 params={"lamin": bbox[0], "lamax": bbox[1],
                         "lomin": bbox[2], "lomax": bbox[3]},
-                headers=headers, timeout=10, verify=False)
-            remaining = resp.headers.get("X-Rate-Limit-Remaining")
-            if remaining:
-                Clock.schedule_once(lambda dt: setattr(self.status_label, 'text', f"剩余配额 {remaining}"), 0)
-            if resp.status_code == 429:
-                Clock.schedule_once(lambda dt: self._on_success(self._mock_rows(), "配额超限·模拟"), 0)
-                return
+                headers=headers, timeout=15, verify=False)
             resp.raise_for_status()
             states = resp.json().get("states")
-            if not states:
-                raise Exception("网络数据为空")
-            rows = []
-            for s in states:
-                if not isinstance(s, list) or len(s) < 11:
-                    continue
-                callsign = (s[1] or "").strip()
-                if not callsign:
-                    continue
-                lon, lat = s[5], s[6]
-                if lat is None or lon is None:
-                    continue
-                dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
-                alt = s[7] if s[7] is not None else 0
-                spd = s[9] if s[9] is not None else 0
-                rows.append((callsign, f"{alt:.0f}", f"{spd:.0f}", round(dist), s))
-            rows.sort(key=lambda x: x[3])
-            Clock.schedule_once(lambda dt: self._on_success(rows[:150], "真实数据"), 0)
-        except requests.exceptions.Timeout:
-            Clock.schedule_once(lambda dt: self._on_success(self._mock_rows(), "网络超时·模拟"), 0)
-        except requests.exceptions.ConnectionError:
-            Clock.schedule_once(lambda dt: self._on_success(self._mock_rows(), "网络不通·模拟"), 0)
+            
+            if states:
+                rows = []
+                for s in states:
+                    if not isinstance(s, list) or len(s) < 11: continue
+                    callsign = (s[1] or "").strip()
+                    if not callsign: continue
+                    lon, lat = s[5], s[6]
+                    if lat is None or lon is None: continue
+                    dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
+                    alt = s[7] if s[7] is not None else 0
+                    spd = s[9] if s[9] is not None else 0
+                    rows.append((callsign, f"{alt:.0f}", f"{spd:.0f}", round(dist), s))
+                
+                if rows:
+                    rows.sort(key=lambda x: x[3])
+                    Clock.schedule_once(lambda dt: self._on_success(rows[:150], "真实数据(OS)"), 0)
+                    return
         except Exception:
-            Clock.schedule_once(lambda dt: self._on_success(self._mock_rows(), "模拟数据"), 0)
+            pass
 
-    def _mock_rows(self):
-        rows = []
-        for _ in range(30):
-            dist = random.randint(100, 1000)
-            alt = random.randint(5000, 12000)
-            spd = random.randint(200, 280)
-            fake_s = ["fake", f"MU{random.randint(100, 999)}", "China", 0, 0,
-                      self.current_lon, self.current_lat, alt, 0, spd, random.randint(0, 360)]
-            rows.append((f"MU{random.randint(100, 999)}", f"{alt}", f"{spd}", dist, fake_s))
-        rows.sort(key=lambda x: x[3])
-        return rows
+        def fail_callback(dt):
+            self.status_label.text = "网络受限或周围无航班"
+            self._refresh_display()
+            self._fetching = False
+        Clock.schedule_once(fail_callback, 0)
 
     def _on_success(self, rows, source_text):
         self._last_rows = rows
@@ -399,6 +441,29 @@ class FlightRadarRoot(BoxLayout):
         return 2 * R * math.asin(math.sqrt(a))
 
     def _on_radar_click(self, instance):
+        if self._layout_mode == "flight":
+            if self.btn_radar.text == "断开雷达":
+                if self.radar_source:
+                    self.radar_source.stop()
+                self.btn_radar.text = "雷达"
+                self.btn_radar.background_color = C_PRIMARY_DARK
+                self.content_box.clear_widgets()
+                self.content_box.add_widget(self.flight_view)
+                return
+            else:
+                self.btn_radar.text = "断开雷达"
+                self.btn_radar.background_color = C_TAG_RED
+                self.content_box.clear_widgets()
+                self.content_box.add_widget(self.radar_card)
+                
+                self.radar_status.text = "等待数据…"
+                self.radar_box.clear_widgets()
+                self.radar_view = RadarView(size_hint=(1, 1))
+                self.radar_box.add_widget(self.radar_view)
+                self.radar_source = RadarSource(self._radar_data, self._radar_status)
+                self.radar_source.start()
+                return
+
         if self.btn_radar.text == "断开雷达":
             if self.radar_source:
                 self.radar_source.stop()
@@ -419,15 +484,8 @@ class FlightRadarRoot(BoxLayout):
         Clock.schedule_once(lambda dt: self._set_radar_status_ui(text), 0)
 
     def _set_radar_status_ui(self, text):
-        if self.radar_view is None:
-            return
+        if self.radar_view is None: return
         self.radar_status.text = text
-        if self.btn_radar.text == "连接中…" and "已连接" in text:
-            self.btn_radar.text = "断开雷达"
-            self.btn_radar.background_color = C_TAG_RED
-        elif "断开" in text or "异常" in text:
-            self.btn_radar.text = "连接雷达"
-            self.btn_radar.background_color = C_PRIMARY_DARK
 
     def _radar_data(self, angle, dist):
         def update(dt):
@@ -436,11 +494,9 @@ class FlightRadarRoot(BoxLayout):
                 self.radar_status.text = f"角度 {angle}° / {dist}cm"
         Clock.schedule_once(update, 0)
 
-
 class FlightRadarApp(App):
     def build(self):
         return FlightRadarRoot()
-
 
 if __name__ == "__main__":
     FlightRadarApp().run()
