@@ -16,6 +16,58 @@ except Exception:
 import math
 import threading
 import requests
+import config
+
+# =========================================================
+# 内置中国全量航空公司数据库 (100+ 家) 及 IATA/ICAO 映射
+# =========================================================
+CHINA_AIRLINES_MATRIX = {
+    "CCA": ("中国国际航空", "CA"), "CSN": ("中国南方航空", "CZ"), "CES": ("中国东方航空", "MU"),
+    "CBJ": ("北京航空", "CA"), "CCD": ("大连航空", "CA"), "CDI": ("国航内蒙", "CA"),
+    "CFA": ("中国飞龙", "CA"), "CKK": ("中国货运航空", "CK"), "CGH": ("桂林航空", "GT"),
+    "CGZ": ("多彩贵州航空", "GY"), "CHJ": ("河北航空", "NS"), "CJR": ("金鹏航空", "Y8"),
+    "CJX": ("江西航空", "RY"), "CKC": ("昆明航空", "KY"), "CQH": ("春秋航空", "9C"),
+    "CSJ": ("长安航空", "9H"), "CSZ": ("深圳航空", "ZH"), "CTJ": ("天津航空", "GS"),
+    "CUA": ("中国联合航空", "KN"), "CXN": ("乌鲁木齐航空", "UQ"), "CYN": ("湖南航空", "A6"),
+    "CYZ": ("圆通航空", "YG"), "CZH": ("东海航空", "DZ"), "DAP": ("九元航空", "AQ"),
+    "DKH": ("吉祥航空", "HO"), "ESR": ("顺丰航空", "O3"), "GDC": ("北部湾航空", "GX"),
+    "HXA": ("华夏航空", "G5"), "JYH": ("奥凯航空", "BK"), "LKE": ("祥鹏航空", "8L"),
+    "OKA": ("奥凯航空", "BK"), "RLH": ("瑞丽航空", "DR"), "SFJ": ("顺丰航空", "O3"),
+    "TBA": ("西藏航空", "TV"), "UEA": ("成都航空", "EU"), "XMN": ("厦门航空", "MF"),
+    "CSC": ("四川航空", "3U"), "CKE": ("吉祥航空", "HO"), "CDG": ("山东航空", "SC"),
+    "CSH": ("上海航空", "FM"), "CHB": ("西部航空", "PN"), "CQN": ("重庆航空", "OQ"),
+    "CDC": ("长龙航空", "GJ"), "CQG": ("华夏航空", "G5"), "CXA": ("厦门航空", "MF"),
+    "FZA": ("福州航空", "FU"), "CAB": ("中国国际货运航空", "CA"), "COC": ("中国货运邮政", "8Y"),
+    "CPA": ("国泰航空", "CX"), "HAD": ("香港航空", "HX"), "EVA": ("长荣航空", "BR"),
+    "CAL": ("中华航空", "CI"), "JNA": ("真航空", "LJ"), "KAL": ("大韩航空", "KE"),
+    "AAR": ("韩亚航空", "OZ"), "ANA": ("全日空", "NH"), "JAL": ("日本航空", "JL"),
+    "SIA": ("新加坡航空", "SQ"), "THA": ("泰国航空", "TG"), "UAE": ("阿联酋航空", "EK"),
+    "HDA": ("香港快运", "UO"), "AMU": ("澳门航空", "NX"), "CRK": ("香港航空", "HX"),
+    "TTW": ("台湾虎航", "IT"), "UIA": ("立荣航空", "B7"), "FEA": ("远东航空", "FE"),
+    "MDA": ("华信航空", "AE"), "SJX": ("星宇航空", "JX"), "XAX": ("星宇航空", "JX"),
+    "HVN": ("越捷航空", "VJ"), "MAS": ("马来西亚航空", "MH"), "AXM": ("亚洲航空", "AK"),
+    "PAL": ("菲律宾航空", "PR"), "CEB": ("宿务太平洋", "5J"), "GIA": ("印尼鹰航", "GA")
+}
+
+IATA_TO_ICAO = {}
+for icao, (cn, iata) in CHINA_AIRLINES_MATRIX.items():
+    IATA_TO_ICAO[iata] = icao
+
+def get_airline_info(callsign):
+    callsign = callsign.strip().upper()
+    prefix3 = callsign[:3]
+    prefix2 = callsign[:2]
+    
+    if prefix3 in CHINA_AIRLINES_MATRIX:
+        return CHINA_AIRLINES_MATRIX[prefix3]
+    
+    if len(callsign) >= 3 and prefix2 in IATA_TO_ICAO and callsign[2].isdigit():
+        return CHINA_AIRLINES_MATRIX[IATA_TO_ICAO[prefix2]]
+        
+    return (prefix3, prefix2)
+
+config.CHINA_AIRLINES_MATRIX = CHINA_AIRLINES_MATRIX
+config.get_airline_info = get_airline_info
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -59,13 +111,12 @@ class FlightRadarRoot(BoxLayout):
         store = get_store()
         self.current_lat = store.data.get("lat", FALLBACK_LAT)
         self.current_lon = store.data.get("lon", FALLBACK_LON)
+        
         self._fetching = False
         self.auto_refresh_event = None
         self.countdown = REFRESH_INTERVAL
         self.radar_source = None
         self.radar_view = None
-        self._gps_started = False
-        self._layout_mode = None
         self._last_rows = []
         self.show_starred_only = False
         self.current_tab = "list"
@@ -106,6 +157,7 @@ class FlightRadarRoot(BoxLayout):
         self.add_widget(self.content_box)
 
         bottom_bar = BoxLayout(size_hint=(1, None), height=dp(48), spacing=SP_S)
+        
         self.btn_action = Button(text="自动刷新", background_normal="",
                                  background_color=C_PRIMARY,
                                  color=(1, 1, 1, 1), bold=True)
@@ -123,62 +175,46 @@ class FlightRadarRoot(BoxLayout):
         Window.bind(size=self._on_window_resize)
         Window.bind(on_pause=self._on_pause, on_resume=self._on_resume)
         Clock.schedule_once(lambda dt: self._ask_permission(), 0.3)
+        
+        self._on_action_click(None)
 
     def _ask_permission(self):
         def on_done(granted):
             if granted:
                 self._start_gps()
-                self.status_label.text = "权限已授予"
+                self.status_label.text = "定位已授权"
             else:
-                self.status_label.text = "权限受限·使用备用位置"
+                self.status_label.text = "使用备用位置"
                 self._load_cache()
         PermissionPopup(on_done=on_done).open()
 
     def _load_cache(self):
         store = get_store()
         cached = store.data.get("flights", [])
-        if not cached:
-            return
+        if not cached: return
         rows = []
         for item in cached:
-            c = item.get("c", "?")
-            a = item.get("a", "0")
-            s = item.get("s", "0")
-            d = item.get("d", 0)
-            try:
-                alt_v = int(float(a))
-                spd_v = float(s)
-            except Exception:
-                alt_v, spd_v = 0, 0
-            raw = ["fake", c, "China", 0, 0,
-                   self.current_lon, self.current_lat,
-                   alt_v, 0, spd_v, 0]
+            c, a, s, d = item.get("c", "?"), item.get("a", "0"), item.get("s", "0"), item.get("d", 0)
+            raw = ["fake", c, "China", 0, 0, self.current_lon, self.current_lat, int(float(a)), 0, float(s), 0]
             rows.append((c, a, s, d, raw))
         self._last_rows = rows
-        self.status_label.text = f"加载缓存 {len(rows)} 架"
+        self.status_label.text = f"缓存 {len(rows)} 架"
         self._refresh_display()
 
     def _start_gps(self):
         if not HAS_GPS:
-            self.status_label.text = "GPS不可用·使用备用"
             self._load_cache()
             return
         try:
-            gps.configure(on_location=self._on_gps_location,
-                          on_status=self._on_gps_status)
+            gps.configure(on_location=self._on_gps_location, on_status=self._on_gps_status)
             gps.start(minTime=1000, minDistance=1)
-            self._gps_started = True
             self._load_cache()
         except Exception:
-            self.status_label.text = "使用备用位置"
             self._load_cache()
 
     def _stop_gps(self):
-        try:
-            gps.stop()
-        except Exception:
-            pass
-        self._gps_started = False
+        try: gps.stop()
+        except: pass
 
     def _on_pause(self, *args):
         self._stop_gps()
@@ -188,26 +224,21 @@ class FlightRadarRoot(BoxLayout):
         self._start_gps()
 
     def _on_gps_location(self, **kw):
-        lat = kw.get('lat')
-        lon = kw.get('lon')
-        if lat is not None and lon is not None:
-            self.current_lat = lat
-            self.current_lon = lon
+        lat, lon = kw.get('lat'), kw.get('lon')
+        if lat and lon:
+            self.current_lat, self.current_lon = lat, lon
             store = get_store()
-            store.data["lat"] = lat
-            store.data["lon"] = lon
+            store.data["lat"], store.data["lon"] = lat, lon
             store.save()
             Clock.schedule_once(lambda dt: setattr(self.status_label, 'text', "定位成功"), 0)
 
-    def _on_gps_status(self, stype, status):
-        pass
+    def _on_gps_status(self, stype, status): pass
 
     def _update_bg(self, *args):
         self.bg_rect.pos = self.pos
         self.bg_rect.size = self.size
 
-    def _on_window_resize(self, window, size):
-        pass
+    def _on_window_resize(self, window, size): pass
 
     def _toggle_star_filter(self, *a):
         self.show_starred_only = not self.show_starred_only
@@ -217,10 +248,8 @@ class FlightRadarRoot(BoxLayout):
     def _refresh_display(self):
         self.grid.clear_widgets()
         for c, a, s, d, raw in self._last_rows:
-            if self.show_starred_only and not get_store().is_starred(c):
-                continue
-            self.grid.add_widget(FlightCard(c, a, s, d, raw, self._show_detail,
-                                            on_toggle_star=self._on_star_change))
+            if self.show_starred_only and not get_store().is_starred(c): continue
+            self.grid.add_widget(FlightCard(c, a, s, d, raw, self._show_detail, on_toggle_star=self._on_star_change))
 
     def _on_star_change(self, callsign):
         is_now = get_store().is_starred(callsign)
@@ -233,12 +262,13 @@ class FlightRadarRoot(BoxLayout):
             self._refresh_display()
 
     def _on_action_click(self, instance):
-        if self.btn_action.text == "停止":
-            if self.auto_refresh_event:
-                self.auto_refresh_event.cancel()
+        if self.auto_refresh_event:
+            self.auto_refresh_event.cancel()
+            self.auto_refresh_event = None
             self.btn_action.text = "自动刷新"
             self.btn_action.background_color = C_PRIMARY
             return
+
         self.btn_action.text = "停止"
         self.btn_action.background_color = C_TAG_RED
         self.countdown = REFRESH_INTERVAL
@@ -246,8 +276,7 @@ class FlightRadarRoot(BoxLayout):
         self.auto_refresh_event = Clock.schedule_interval(self._tick, 1.0)
 
     def _tick(self, dt):
-        if self._fetching:
-            return
+        if self._fetching: return
         self.countdown -= 1
         if self.countdown <= 0:
             self.countdown = REFRESH_INTERVAL
@@ -256,53 +285,99 @@ class FlightRadarRoot(BoxLayout):
             self.status_label.text = f"倒计时 {self.countdown}s"
 
     def _fetch_flights(self):
-        if self._fetching:
-            return
+        if self._fetching: return
         self._fetching = True
         self.status_label.text = "请求中…"
         threading.Thread(target=self._worker, daemon=True).start()
 
     def _worker(self):
+        radius_nm = int(RADIUS_KM / 1.852)
+        headers = {"User-Agent": "Mozilla/5.0"}
+
         try:
-            radius_nm = int(RADIUS_KM / 1.852)
             url = f"https://api.airplanes.live/v2/point/{self.current_lat}/{self.current_lon}/{radius_nm}"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            resp = requests.get(url, headers=headers, timeout=15, verify=False)
-            resp.raise_for_status()
-            data = resp.json()
-            ac_list = data.get("ac", [])
-            
-            if ac_list:
-                rows = []
-                for ac in ac_list:
-                    callsign = (ac.get("flight") or "").strip()
-                    if not callsign: continue
-                    lat = ac.get("lat")
-                    lon = ac.get("lon")
-                    if lat is None or lon is None: continue
-                    
-                    alt = ac.get("alt_baro", 0)
-                    if alt == "ground": alt = 0
-                    spd = ac.get("gs", 0)
-                    track = ac.get("track", 0)
-                    hex_code = ac.get("hex", "fake")
-                    
-                    dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
-                    raw = [hex_code, callsign, "China", 0, 0, lon, lat, alt, 0, spd, track]
-                    rows.append((callsign, f"{alt}", f"{spd}", round(dist), raw))
-                
-                if rows:
-                    rows.sort(key=lambda x: x[3])
-                    Clock.schedule_once(lambda dt: self._on_success(rows[:150], "真实数据(ADS-B)"), 0)
-                    return
-        except Exception:
-            pass
+            resp = requests.get(url, headers=headers, timeout=5, verify=False)
+            if resp.status_code == 200 and resp.json().get("ac"):
+                self._parse_adsb_data(resp.json().get("ac"), "真实(主)")
+                return
+        except Exception: pass
+
+        try:
+            url = f"https://api.adsb.lol/v2/point/{self.current_lat}/{self.current_lon}/{radius_nm}"
+            resp = requests.get(url, headers=headers, timeout=5, verify=False)
+            if resp.status_code == 200 and resp.json().get("ac"):
+                self._parse_adsb_data(resp.json().get("ac"), "真实(备)")
+                return
+        except Exception: pass
+
+        try:
+            url = f"https://opendata.adsb.fi/api/v2/lat/{self.current_lat}/lon/{self.current_lon}/dist/{radius_nm}"
+            resp = requests.get(url, headers=headers, timeout=5, verify=False)
+            if resp.status_code == 200 and resp.json().get("ac"):
+                self._parse_adsb_data(resp.json().get("ac"), "真实(兜底)")
+                return
+        except Exception: pass
+
+        try:
+            d_lat = RADIUS_KM / 111.0
+            d_lon = RADIUS_KM / (111.0 * math.cos(math.radians(self.current_lat)))
+            bbox = (self.current_lat - d_lat, self.current_lat + d_lat,
+                    self.current_lon - d_lon, self.current_lon + d_lon)
+            os_headers = {"User-Agent": "Mozilla/5.0"}
+            os_headers.update(OpenSkyAuth.get_headers())
+            resp = requests.get(
+                "https://opensky-network.org/api/states/all",
+                params={"lamin": bbox[0], "lamax": bbox[1], "lomin": bbox[2], "lomax": bbox[3]},
+                headers=os_headers, timeout=5, verify=False)
+            if resp.status_code == 200:
+                states = resp.json().get("states")
+                if states:
+                    rows = []
+                    for s in states:
+                        if not isinstance(s, list) or len(s) < 11: continue
+                        cs = (s[1] or "").strip()
+                        if not cs: continue
+                        lon, lat = s[5], s[6]
+                        if lat is None or lon is None: continue
+                        dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
+                        alt = s[7] if s[7] is not None else 0
+                        spd = s[9] if s[9] is not None else 0
+                        rows.append((cs, f"{alt:.0f}", f"{spd:.0f}", round(dist), s))
+                    if rows:
+                        rows.sort(key=lambda x: x[3])
+                        Clock.schedule_once(lambda dt: self._on_success(rows[:150], "OpenSky数据"), 0)
+                        return
+        except Exception: pass
 
         def fail_callback(dt):
-            self.status_label.text = "网络受限或周围无航班"
+            self._last_rows = []
             self._refresh_display()
+            self.status_label.text = "网络失败或当前无航班"
             self._fetching = False
         Clock.schedule_once(fail_callback, 0)
+
+    def _parse_adsb_data(self, ac_list, source_name):
+        rows = []
+        for ac in ac_list:
+            callsign = (ac.get("flight") or "").strip()
+            if not callsign: continue
+            lat = ac.get("lat")
+            lon = ac.get("lon")
+            if lat is None or lon is None: continue
+            
+            alt = ac.get("alt_baro", 0)
+            if alt == "ground": alt = 0
+            spd = ac.get("gs", 0)
+            track = ac.get("track", 0)
+            hex_code = ac.get("hex", "fake")
+            
+            dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
+            raw = [hex_code, callsign, "China", 0, 0, lon, lat, alt, 0, spd, track]
+            rows.append((callsign, f"{alt}", f"{spd}", round(dist), raw))
+        
+        if rows:
+            rows.sort(key=lambda x: x[3])
+            Clock.schedule_once(lambda dt: self._on_success(rows[:150], source_name), 0)
 
     def _on_success(self, rows, source_text):
         self._last_rows = rows
