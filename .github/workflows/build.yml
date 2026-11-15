@@ -7,37 +7,24 @@ on:
 
 jobs:
   build-android:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    # 直接使用 Kivy 官方提供的 Docker 镜像，里面包含所有完美配置的编译环境
+    - name: Build with Buildozer in Docker
+      uses: addnab/docker-run-action@v3
       with:
-        python-version: '3.10'
-
-    # 补全所有底层 C 语言编译必须的库，包含修复宿主机 Python 的 bz2/sqlite 等
-    - name: Install System Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool libltdl-dev pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev ccache build-essential libbz2-dev libsqlite3-dev libreadline-dev
-
-    # 纯净安装，无缓存，防止之前失败的错误环境残留
-    - name: Install Buildozer and dependencies
-      run: |
-        python3 -m pip install --upgrade pip
-        pip3 install buildozer==1.5.0 virtualenv
-        # 强制锁定底层依赖版本，避坑 sh 2.0 破坏性更新及 setuptools 兼容性
-        pip3 install "cython==0.29.36" "setuptools<71.0.0" "sh<2.0"
-
-    - name: Build with Buildozer
-      run: |
-        # 限制并发，死保 7GB 内存不溢出
-        export MAKEFLAGS="-j2"
-        rm -rf .buildozer
-        buildozer -v android debug
+        image: kivy/buildozer:latest
+        options: -v ${{ github.workspace }}:/home/user/hostcwd
+        run: |
+          cd /home/user/hostcwd
+          # 每次清理，防止旧错误残留
+          rm -rf .buildozer
+          # 直接编译
+          buildozer -v android debug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
