@@ -18,9 +18,6 @@ import threading
 import requests
 import config
 
-# =========================================================
-# 内置中国全量航空公司数据库 (100+ 家) 及 IATA/ICAO 映射
-# =========================================================
 CHINA_AIRLINES_MATRIX = {
     "CCA": ("中国国际航空", "CA"), "CSN": ("中国南方航空", "CZ"), "CES": ("中国东方航空", "MU"),
     "CBJ": ("北京航空", "CA"), "CCD": ("大连航空", "CA"), "CDI": ("国航内蒙", "CA"),
@@ -293,10 +290,13 @@ class FlightRadarRoot(BoxLayout):
     def _worker(self):
         radius_nm = int(RADIUS_KM / 1.852)
         headers = {"User-Agent": "Mozilla/5.0"}
+        
+        # 3秒超时：良好网络下绝对够用，弱网下最多卡3秒就会跳过
+        timeout_sec = 3.0  
 
         try:
             url = f"https://api.airplanes.live/v2/point/{self.current_lat}/{self.current_lon}/{radius_nm}"
-            resp = requests.get(url, headers=headers, timeout=5, verify=False)
+            resp = requests.get(url, headers=headers, timeout=timeout_sec, verify=False)
             if resp.status_code == 200 and resp.json().get("ac"):
                 self._parse_adsb_data(resp.json().get("ac"), "真实(主)")
                 return
@@ -304,7 +304,7 @@ class FlightRadarRoot(BoxLayout):
 
         try:
             url = f"https://api.adsb.lol/v2/point/{self.current_lat}/{self.current_lon}/{radius_nm}"
-            resp = requests.get(url, headers=headers, timeout=5, verify=False)
+            resp = requests.get(url, headers=headers, timeout=timeout_sec, verify=False)
             if resp.status_code == 200 and resp.json().get("ac"):
                 self._parse_adsb_data(resp.json().get("ac"), "真实(备)")
                 return
@@ -312,7 +312,7 @@ class FlightRadarRoot(BoxLayout):
 
         try:
             url = f"https://opendata.adsb.fi/api/v2/lat/{self.current_lat}/lon/{self.current_lon}/dist/{radius_nm}"
-            resp = requests.get(url, headers=headers, timeout=5, verify=False)
+            resp = requests.get(url, headers=headers, timeout=timeout_sec, verify=False)
             if resp.status_code == 200 and resp.json().get("ac"):
                 self._parse_adsb_data(resp.json().get("ac"), "真实(兜底)")
                 return
@@ -328,7 +328,7 @@ class FlightRadarRoot(BoxLayout):
             resp = requests.get(
                 "https://opensky-network.org/api/states/all",
                 params={"lamin": bbox[0], "lamax": bbox[1], "lomin": bbox[2], "lomax": bbox[3]},
-                headers=os_headers, timeout=5, verify=False)
+                headers=os_headers, timeout=timeout_sec, verify=False)
             if resp.status_code == 200:
                 states = resp.json().get("states")
                 if states:
@@ -352,7 +352,7 @@ class FlightRadarRoot(BoxLayout):
         def fail_callback(dt):
             self._last_rows = []
             self._refresh_display()
-            self.status_label.text = "网络失败或当前无航班"
+            self.status_label.text = "无网络或当前无航班"
             self._fetching = False
         Clock.schedule_once(fail_callback, 0)
 
