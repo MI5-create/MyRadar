@@ -290,15 +290,13 @@ class FlightRadarRoot(BoxLayout):
     def _worker(self):
         radius_nm = int(RADIUS_KM / 1.852)
         headers = {"User-Agent": "Mozilla/5.0"}
-        
-        # 3秒超时：良好网络下绝对够用，弱网下最多卡3秒就会跳过
-        timeout_sec = 3.0  
+        timeout_sec = 5.0  
 
         try:
             url = f"https://api.airplanes.live/v2/point/{self.current_lat}/{self.current_lon}/{radius_nm}"
             resp = requests.get(url, headers=headers, timeout=timeout_sec, verify=False)
             if resp.status_code == 200 and resp.json().get("ac"):
-                self._parse_adsb_data(resp.json().get("ac"), "真实(主)")
+                self._parse_adsb_data(resp.json().get("ac"), "真实数据(主)")
                 return
         except Exception: pass
 
@@ -306,7 +304,7 @@ class FlightRadarRoot(BoxLayout):
             url = f"https://api.adsb.lol/v2/point/{self.current_lat}/{self.current_lon}/{radius_nm}"
             resp = requests.get(url, headers=headers, timeout=timeout_sec, verify=False)
             if resp.status_code == 200 and resp.json().get("ac"):
-                self._parse_adsb_data(resp.json().get("ac"), "真实(备)")
+                self._parse_adsb_data(resp.json().get("ac"), "真实数据(备)")
                 return
         except Exception: pass
 
@@ -314,7 +312,7 @@ class FlightRadarRoot(BoxLayout):
             url = f"https://opendata.adsb.fi/api/v2/lat/{self.current_lat}/lon/{self.current_lon}/dist/{radius_nm}"
             resp = requests.get(url, headers=headers, timeout=timeout_sec, verify=False)
             if resp.status_code == 200 and resp.json().get("ac"):
-                self._parse_adsb_data(resp.json().get("ac"), "真实(兜底)")
+                self._parse_adsb_data(resp.json().get("ac"), "真实数据(兜底)")
                 return
         except Exception: pass
 
@@ -336,7 +334,8 @@ class FlightRadarRoot(BoxLayout):
                     for s in states:
                         if not isinstance(s, list) or len(s) < 11: continue
                         cs = (s[1] or "").strip()
-                        if not cs: continue
+                        hex_code = s[0] if s[0] else "unknown"
+                        if not cs: cs = f"HEX-{hex_code}"
                         lon, lat = s[5], s[6]
                         if lat is None or lon is None: continue
                         dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
@@ -345,14 +344,14 @@ class FlightRadarRoot(BoxLayout):
                         rows.append((cs, f"{alt:.0f}", f"{spd:.0f}", round(dist), s))
                     if rows:
                         rows.sort(key=lambda x: x[3])
-                        Clock.schedule_once(lambda dt: self._on_success(rows[:150], "OpenSky数据"), 0)
+                        Clock.schedule_once(lambda dt: self._on_success(rows[:150], "真实数据(OS)"), 0)
                         return
         except Exception: pass
 
         def fail_callback(dt):
             self._last_rows = []
             self._refresh_display()
-            self.status_label.text = "无网络或当前无航班"
+            self.status_label.text = "网络受限或当前区域无航班"
             self._fetching = False
         Clock.schedule_once(fail_callback, 0)
 
@@ -360,7 +359,11 @@ class FlightRadarRoot(BoxLayout):
         rows = []
         for ac in ac_list:
             callsign = (ac.get("flight") or "").strip()
-            if not callsign: continue
+            hex_code = ac.get("hex", "unknown").upper()
+            
+            if not callsign:
+                callsign = f"HEX-{hex_code}"
+
             lat = ac.get("lat")
             lon = ac.get("lon")
             if lat is None or lon is None: continue
@@ -369,7 +372,6 @@ class FlightRadarRoot(BoxLayout):
             if alt == "ground": alt = 0
             spd = ac.get("gs", 0)
             track = ac.get("track", 0)
-            hex_code = ac.get("hex", "fake")
             
             dist = self._haversine(self.current_lat, self.current_lon, lat, lon)
             raw = [hex_code, callsign, "China", 0, 0, lon, lat, alt, 0, spd, track]
@@ -378,6 +380,8 @@ class FlightRadarRoot(BoxLayout):
         if rows:
             rows.sort(key=lambda x: x[3])
             Clock.schedule_once(lambda dt: self._on_success(rows[:150], source_name), 0)
+        else:
+            Clock.schedule_once(lambda dt: self._on_success([], "区域无航班"), 0)
 
     def _on_success(self, rows, source_text):
         self._last_rows = rows
@@ -408,17 +412,15 @@ class FlightRadarRoot(BoxLayout):
             self.current_tab = "radar"
             self.btn_tab_switch.text = "航班列表"
             
-            self.radar_status.text = "雷达未连接"
+            self.radar_status.text = "等待雷达数据..."
             self.radar_box.clear_widgets()
             self.radar_box.add_widget(self.radar_status)
-            
             self.content_box.add_widget(self.radar_card)
             
             if self.radar_source:
                 self.radar_source.stop()
-            self.radar_status.text = "等待数据…"
-            self.radar_box.clear_widgets()
             self.radar_view = RadarView(size_hint=(1, 1))
+            self.radar_box.clear_widgets()
             self.radar_box.add_widget(self.radar_view)
             self.radar_source = RadarSource(self._radar_data, self._radar_status)
             self.radar_source.start()
@@ -430,11 +432,7 @@ class FlightRadarRoot(BoxLayout):
                 self.radar_source.stop()
 
     def _radar_status(self, text):
-        Clock.schedule_once(lambda dt: self._set_radar_status_ui(text), 0)
-
-    def _set_radar_status_ui(self, text):
-        if self.radar_view is None: return
-        self.radar_status.text = text
+        Clock.schedule_once(lambda dt: setattr(self.radar_status, 'text', text), 0)
 
     def _radar_data(self, angle, dist):
         def update(dt):
