@@ -160,7 +160,7 @@ class TacticalRadarView(RelativeLayout):
         self.flight_heading = 0
         self.flight_spd = 0
         self.scan_angle = 0
-        self.max_range = 500.0 
+        self.max_range = 300.0 
         self.dist_to_center = 0
         self.bearing = 0
 
@@ -238,6 +238,9 @@ class TacticalRadarView(RelativeLayout):
              - sin(radians(self.center_lat)) * cos(radians(self.flight_lat)) * cos(d_lon))
         self.bearing = (degrees(atan2(y, x)) + 360) % 360
 
+        if self.dist_to_center > self.max_range:
+            self.max_range = self.dist_to_center * 1.2
+
     def _layout(self, *args):
         w, h = self.width, self.height
         if w < 50 or h < 50: return
@@ -314,10 +317,12 @@ class FlightDetailPopup(ModalView):
                       bold=True, halign="left", valign="middle")
         title.bind(size=title.setter("text_size"))
         info.add_widget(title)
+        
         self.aircraft_lbl = Label(text="机型: 正在查询…", color=C_TEXT_SUB,
                                   font_size="12sp", halign="left")
         self.aircraft_lbl.bind(size=self.aircraft_lbl.setter("text_size"))
         info.add_widget(self.aircraft_lbl)
+        
         self.reg_lbl = Label(text="注册号: 正在查询…", color=C_TEXT_SUB,
                              font_size="12sp", halign="left")
         self.reg_lbl.bind(size=self.reg_lbl.setter("text_size"))
